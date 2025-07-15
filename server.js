@@ -3,7 +3,6 @@ const cors = require('cors');
 const multer = require('multer');
 const ffmpeg = require('fluent-ffmpeg');
 const fs = require('fs');
-const path = require('path');
 
 const app = express();
 app.use(cors());
@@ -11,13 +10,18 @@ app.use(cors());
 const upload = multer({ dest: 'uploads/' });
 
 app.post('/upload', upload.fields([{ name: 'image' }, { name: 'audio' }]), (req, res) => {
-  const image = req.files.image[0];
-  const audio = req.files.audio[0];
+  const image = req.files.image?.[0];
+  const audio = req.files.audio?.[0];
+
+  if (!image || !audio) {
+    return res.status(400).send("Image or audio missing");
+  }
+
   const outputPath = `output-${Date.now()}.mp4`;
 
   ffmpeg()
     .addInput(image.path)
-    .loop(10) // default loop to match image with audio
+    .loop(10)
     .addInput(audio.path)
     .outputOptions('-shortest')
     .save(outputPath)
@@ -29,15 +33,12 @@ app.post('/upload', upload.fields([{ name: 'image' }, { name: 'audio' }]), (req,
       });
     })
     .on('error', err => {
-      console.error(err);
-      res.status(500).send('FFmpeg error: ' + err.message);
+      console.error('FFmpeg error:', err);
+      res.status(500).send('Video processing failed.');
     });
 });
 
-// ✅ Render expects PORT from env variable
-const PORT = process.env.PORT || 3000;
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`✅ Server is running on port ${PORT}`);
 });
-
