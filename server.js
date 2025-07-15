@@ -1,33 +1,41 @@
 const express = require('express');
-const multer = require('multer');
 const cors = require('cors');
+const multer = require('multer');
+const ffmpeg = require('fluent-ffmpeg');
 const fs = require('fs');
-const { exec } = require('child_process');
+const path = require('path');
 
 const app = express();
-const upload = multer({ dest: 'uploads/' });
-
 app.use(cors());
 
+const upload = multer({ dest: 'uploads/' });
+
 app.post('/upload', upload.fields([{ name: 'image' }, { name: 'audio' }]), (req, res) => {
-  const imagePath = req.files.image[0].path;
-  const audioPath = req.files.audio[0].path;
-  const outputPath = `output/${Date.now()}.mp4`;
+  const image = req.files.image[0];
+  const audio = req.files.audio[0];
+  const outputPath = `output-${Date.now()}.mp4`;
 
-  const cmd = `ffmpeg -loop 1 -i ${imagePath} -i ${audioPath} -c:v libx264 -tune stillimage -c:a aac -b:a 192k -shortest -movflags +faststart ${outputPath}`;
-
-  exec(cmd, (err) => {
-    if (err) {
-      console.error('FFmpeg error:', err);
-      return res.status(500).send('FFmpeg failed');
-    }
-
-    res.download(outputPath, () => {
-      fs.unlinkSync(imagePath);
-      fs.unlinkSync(audioPath);
-      fs.unlinkSync(outputPath);
+  ffmpeg()
+    .addInput(image.path)
+    .loop(10) // default loop to match image with audio
+    .addInput(audio.path)
+    .outputOptions('-shortest')
+    .save(outputPath)
+    .on('end', () => {
+      res.download(outputPath, () => {
+        fs.unlinkSync(outputPath);
+        fs.unlinkSync(image.path);
+        fs.unlinkSync(audio.path);
+      });
+    })
+    .on('error', err => {
+      console.error(err);
+      res.status(500).send('FFmpeg error: ' + err.message);
     });
-  });
 });
 
-app.listen(3000, () => console.log('Server running on port 3000'));
+// ✅ Render expects PORT from env variable
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+});
